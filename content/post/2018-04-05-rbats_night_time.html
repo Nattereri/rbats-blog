@@ -1,0 +1,6453 @@
+---
+title: "Night Times"
+author: "Steve Markham"
+date: 2018-04-05T21:13:45-01:00
+categories: ["R"]
+tags: ["R Markdown", "bats", "suntimes"]
+---
+
+
+
+<pre class="r"><code>#&lt;----------------------------------------------------------------------
+#Function - For getting sunset sun rise and night length (used by Exit_Reentry_Times)
+#&lt;----------------------------------------------------------------------
+NightData &lt;- function(StartDate, DurationDays, lat, long) {
+  
+  # Function to return sunset sunrise and night length with long/lat and night
+  #Aruments list (fist Night, duratiojn , lon, lat)
+  
+  #Works with night so and an extra day to get dawn
+  
+  #Get sunrise and sunset times for period of static placement
+  
+  if(DurationDays == 0){DurationDays &lt;- 1}
+  
+  SunTimes &lt;- sunrise.set(lat, long, StartDate, timezone = &quot;Europe/London&quot;, num.days = DurationDays + 1)
+  
+  ## Table of Night and sun rise/set and times (based on EmergenceData data frame)
+  
+  # Take away last row
+  SunSets &lt;- SunTimes %&gt;% 
+    slice(1:(n() - 1)) %&gt;% 
+    pull(sunset) 
+  
+  # Take away first row  
+  SunRises &lt;- SunTimes %&gt;% 
+    slice(2:n()) %&gt;% 
+    pull(sunrise) 
+  
+  Nights &lt;- seq.Date(from=StartDate, length.out = DurationDays, by=&#39;days&#39;)
+  
+  NightLength &lt;- round_hms(as.hms(-(SunSets - SunRises)), 60)
+  
+  #NightLength &lt;- 
+  
+  NightStats &lt;- tibble(Nights, SunSets, SunRises, NightLength)
+  
+  return(NightStats)
+  
+}
+
+#&lt;-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|</code></pre>
+<pre class="r"><code>#&lt;----------------------------------------------------------------------
+#Function - With NightData will return text of Suntimes ready for a Table (Kable)
+#&lt;----------------------------------------------------------------------
+TextSunTimes &lt;- function(Data, Type) {
+  
+  #if Type = 1 the no Night Length included
+  #if Type = 2 the Night Length is included
+  #if Type = 3  week day is included but not the Night Length
+  #if Type = 4  week day and Night Length is included
+  
+  if(missing(Type)) {Type &lt;- 1}
+  
+  if (Type == 1) { 
+    
+    Data &lt;- Data %&gt;% 
+      mutate(justmin1 = stringr::str_pad(lubridate::minute(SunSets), 2, side = &quot;left&quot;, pad = &quot;0&quot;),
+             timeset = paste(lubridate::hour(SunSets), justmin1, sep=&quot;:&quot;), 
+             justmin2 = stringr::str_pad(lubridate::minute(SunRises), 2, side = &quot;left&quot;, pad = &quot;0&quot;),
+             justmin3 = stringr::str_pad(lubridate::hour(SunRises), 2, side = &quot;left&quot;, pad = &quot;0&quot;),
+             timerise = paste(justmin3, justmin2, sep=&quot;:&quot;),
+             night = Fm_date(Nights, 1)) %&gt;% 
+      select(night, timeset, timerise)
+    
+    names(Data) &lt;- c(&quot;Night&quot;, &quot;Sunset (hrs)&quot;, &quot;Sunrise (hrs)&quot;)
+    
+  } else if (Type == 2) {
+    
+    Data &lt;- Data %&gt;% 
+      mutate(justmin1 = stringr::str_pad(lubridate::minute(SunSets), 2, side = &quot;left&quot;, pad = &quot;0&quot;),
+             timeset = paste(lubridate::hour(SunSets), justmin1, sep=&quot;:&quot;), 
+             justmin2 = stringr::str_pad(lubridate::minute(SunRises), 2, side = &quot;left&quot;, pad = &quot;0&quot;),
+             justmin3 = stringr::str_pad(lubridate::hour(SunRises), 2, side = &quot;left&quot;, pad = &quot;0&quot;),
+             timerise = paste(justmin3, justmin2, sep=&quot;:&quot;),
+             night = Fm_date(Nights, 1),
+             NightLength = stringr::str_sub(as.character(NightLength), 1, 5)) %&gt;% 
+      select(night, timeset, timerise, NightLength)
+    
+    names(Data) &lt;- c(&quot;Night&quot;, &quot;Sunset (hrs)&quot;, &quot;Sunrise (hrs)&quot;, &quot;Duration (hrs:min)&quot;)
+    
+  } else if (Type == 3) {
+  
+    Data &lt;- Data %&gt;% 
+      mutate(justmin1 = stringr::str_pad(lubridate::minute(SunSets), 2, side = &quot;left&quot;, pad = &quot;0&quot;),
+             timeset = paste(lubridate::hour(SunSets), justmin1, sep=&quot;:&quot;), 
+             justmin2 = stringr::str_pad(lubridate::minute(SunRises), 2, side = &quot;left&quot;, pad = &quot;0&quot;),
+             justmin3 = stringr::str_pad(lubridate::hour(SunRises), 2, side = &quot;left&quot;, pad = &quot;0&quot;),
+             timerise = paste(justmin3, justmin2, sep=&quot;:&quot;),
+             night = Fm_date(Nights, 1),
+             weekday = lubridate::wday(Nights, label = T, abbr = F)) %&gt;%
+      select(weekday, night, timeset, timerise)
+    
+    names(Data) &lt;- c(&quot;Day of Week&quot;, &quot;Night&quot;, &quot;Sunset (hrs)&quot;, &quot;Sunrise (hrs)&quot;)
+  
+  } else if (Type == 4) {
+    
+    Data &lt;- Data %&gt;% 
+      mutate(justmin1 = stringr::str_pad(lubridate::minute(SunSets), 2, side = &quot;left&quot;, pad = &quot;0&quot;),
+             timeset = paste(lubridate::hour(SunSets), justmin1, sep=&quot;:&quot;), 
+             justmin2 = stringr::str_pad(lubridate::minute(SunRises), 2, side = &quot;left&quot;, pad = &quot;0&quot;),
+             justmin3 = stringr::str_pad(lubridate::hour(SunRises), 2, side = &quot;left&quot;, pad = &quot;0&quot;),
+             timerise = paste(justmin3, justmin2, sep=&quot;:&quot;),
+             night = Fm_date(Nights, 1),
+             weekday = lubridate::wday(Nights, label = T, abbr = F),
+             NightLength = stringr::str_sub(as.character(NightLength), 1, 5)) %&gt;%
+      select(weekday, night, timeset, timerise, NightLength)
+    
+    names(Data) &lt;- c(&quot;Day of Week&quot;, &quot;Night&quot;, &quot;Sunset (hrs)&quot;, &quot;Sunrise (hrs)&quot;, &quot;Duration (hrs:min)&quot;)
+    
+  }
+  
+  return(Data)
+  
+}
+
+#&lt;-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|</code></pre>
+<pre class="r"><code>###########################################################################
+#Formats a POSdate or Date for Reporting.
+Fm_date &lt;- function(Format.Date, style){
+  
+  if(style == 1) {
+    
+    stringr::str_c( lubridate::day(Format.Date) , 
+           lubridate::month(Format.Date, label=TRUE), 
+           lubridate::year(Format.Date), sep=&quot; &quot;)
+    
+  } else if(style == 2) {
+    
+    #Abbr month and date only
+    stringr::str_c( lubridate::day(Format.Date), 
+           lubridate::month(Format.Date, label=TRUE, abbr=FALSE), 
+           lubridate::year(Format.Date), sep=&quot; &quot;)
+    
+  } else if(style == 3) {
+    
+    stringr::str_c( lubridate::day(Format.Date) , 
+           lubridate::month(Format.Date, label=TRUE), sep=&quot; &quot;)
+    
+  } else if(style == 4) {
+    #Full date e.g. Thursday 3 August 2017
+    stringr::str_c( lubridate::wday(Format.Date, label=TRUE, abbr=FALSE),
+                    lubridate::day(Format.Date),
+                    lubridate::month(Format.Date, label=TRUE, abbr=FALSE), 
+                    lubridate::year(Format.Date), sep=&quot; &quot;)
+    
+  } else if(style == 5) {
+    #Full date and Time e.g. Thu 3 Aug 2017 20:13:56
+    stringr::str_c( lubridate::wday(Format.Date, label=TRUE, abbr=TRUE),
+                    &quot; &quot;,
+                    lubridate::day(Format.Date),
+                    &quot; &quot;,
+                    lubridate::month(Format.Date, label=TRUE, abbr=TRUE), 
+                    &quot; &quot;,
+                    lubridate::year(Format.Date), 
+                    &quot; &quot;,
+                    stringr::str_pad(lubridate::hour(Format.Date), 2, side = &quot;left&quot;, pad = &quot;0&quot;),
+                    &quot;:&quot;,
+                    stringr::str_pad(lubridate::minute(Format.Date), 2, side = &quot;left&quot;, pad = &quot;0&quot;),
+                    &quot;hrs&quot;,
+                    sep=&quot;&quot;)
+    
+  } else if(style == 6) {
+    
+    #Simple date 
+    stringr::str_c( lubridate::day(Format.Date), 
+                    lubridate::month(Format.Date), 
+                    stringr::str_sub(lubridate::year(Format.Date), start=3, end=4), 
+                    sep=&quot;-&quot;)
+    
+  } else if(style == 7) {
+    
+    # date (month and Year)
+    stringr::str_c( lubridate::month(Format.Date, label=TRUE, , abbr=FALSE), 
+                    lubridate::year(Format.Date), 
+                    sep=&quot; &quot;)
+    
+  }
+}</code></pre>
+<div id="BeaulieuSun" class="section level2">
+<h2>Night Times for a Year</h2>
+<p>Sun times for a year can be obtained for any loaction or any year using the functions <code>NightData</code> and <code>TextSunTimes</code>; for more details on these functions see section <a href="#SunTimes"><strong>??</strong></a>. Table <a href="#tab:nice-tab13">1</a> below shows the Suntimes for Beaulieu Park for year 2020.</p>
+<ul>
+<li>Start Date e.g. 1<sup>st</sup> January 2020</li>
+<li>Duration<code>365</code> days</li>
+<li>Latitude <code>51.762703</code><br />
+</li>
+<li>Longitude <code>0.510175</code></li>
+</ul>
+<pre class="r"><code>Beaulieu &lt;- NightData(lubridate::dmy(01012020), 365, 51.762703, 0.510175)
+Beaulieu</code></pre>
+<pre><code>## # A tibble: 365 x 4
+##    Nights     SunSets             SunRises            NightLength
+##    &lt;date&gt;     &lt;dttm&gt;              &lt;dttm&gt;              &lt;time&gt;     
+##  1 2020-01-01 2020-01-01 15:57:49 2020-01-02 08:04:49 16:07      
+##  2 2020-01-02 2020-01-02 15:58:52 2020-01-03 08:04:40 16:06      
+##  3 2020-01-03 2020-01-03 15:59:59 2020-01-04 08:04:27 16:04      
+##  4 2020-01-04 2020-01-04 16:01:08 2020-01-05 08:04:10 16:03      
+##  5 2020-01-05 2020-01-05 16:02:19 2020-01-06 08:03:50 16:02      
+##  6 2020-01-06 2020-01-06 16:03:33 2020-01-07 08:03:27 16:00      
+##  7 2020-01-07 2020-01-07 16:04:50 2020-01-08 08:03:01 15:58      
+##  8 2020-01-08 2020-01-08 16:06:09 2020-01-09 08:02:32 15:56      
+##  9 2020-01-09 2020-01-09 16:07:30 2020-01-10 08:01:59 15:54      
+## 10 2020-01-10 2020-01-10 16:08:53 2020-01-11 08:01:23 15:53      
+## # ... with 355 more rows</code></pre>
+<pre class="r"><code>kable(TextSunTimes(Beaulieu, 4), &quot;html&quot;, align = c(&quot;l&quot;, &quot;r&quot;, &quot;r&quot;, &quot;r&quot;, &quot;r&quot;),
+      booktabs = TRUE, caption = &#39;Beaulieu Park Night Times 2020&#39;) %&gt;%
+  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)) %&gt;%
+  column_spec(4, italic = T) %&gt;%
+  scroll_box(width = &quot;700px&quot;, height = &quot;250px&quot;)</code></pre>
+<div style="border: 1px solid #ddd; padding: 5px; overflow-y: scroll; height:250px; overflow-x: scroll; width:700px; ">
+<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+<caption>
+<span id="tab:nice-tab13">Table 1: </span>Beaulieu Park Night Times 2020
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Day of Week
+</th>
+<th style="text-align:right;">
+Night
+</th>
+<th style="text-align:right;">
+Sunset (hrs)
+</th>
+<th style="text-align:right;">
+Sunrise (hrs)
+</th>
+<th style="text-align:right;">
+Duration (hrs:min)
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+1 Jan 2020
+</td>
+<td style="text-align:right;">
+15:57
+</td>
+<td style="text-align:right;font-style: italic;">
+08:04
+</td>
+<td style="text-align:right;">
+16:07
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+2 Jan 2020
+</td>
+<td style="text-align:right;">
+15:58
+</td>
+<td style="text-align:right;font-style: italic;">
+08:04
+</td>
+<td style="text-align:right;">
+16:06
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+3 Jan 2020
+</td>
+<td style="text-align:right;">
+15:59
+</td>
+<td style="text-align:right;font-style: italic;">
+08:04
+</td>
+<td style="text-align:right;">
+16:04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+4 Jan 2020
+</td>
+<td style="text-align:right;">
+16:01
+</td>
+<td style="text-align:right;font-style: italic;">
+08:04
+</td>
+<td style="text-align:right;">
+16:03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+5 Jan 2020
+</td>
+<td style="text-align:right;">
+16:02
+</td>
+<td style="text-align:right;font-style: italic;">
+08:03
+</td>
+<td style="text-align:right;">
+16:02
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+6 Jan 2020
+</td>
+<td style="text-align:right;">
+16:03
+</td>
+<td style="text-align:right;font-style: italic;">
+08:03
+</td>
+<td style="text-align:right;">
+16:00
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+7 Jan 2020
+</td>
+<td style="text-align:right;">
+16:04
+</td>
+<td style="text-align:right;font-style: italic;">
+08:03
+</td>
+<td style="text-align:right;">
+15:58
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+8 Jan 2020
+</td>
+<td style="text-align:right;">
+16:06
+</td>
+<td style="text-align:right;font-style: italic;">
+08:02
+</td>
+<td style="text-align:right;">
+15:56
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+9 Jan 2020
+</td>
+<td style="text-align:right;">
+16:07
+</td>
+<td style="text-align:right;font-style: italic;">
+08:01
+</td>
+<td style="text-align:right;">
+15:54
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+10 Jan 2020
+</td>
+<td style="text-align:right;">
+16:08
+</td>
+<td style="text-align:right;font-style: italic;">
+08:01
+</td>
+<td style="text-align:right;">
+15:53
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+11 Jan 2020
+</td>
+<td style="text-align:right;">
+16:10
+</td>
+<td style="text-align:right;font-style: italic;">
+08:00
+</td>
+<td style="text-align:right;">
+15:50
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+12 Jan 2020
+</td>
+<td style="text-align:right;">
+16:11
+</td>
+<td style="text-align:right;font-style: italic;">
+08:00
+</td>
+<td style="text-align:right;">
+15:48
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+13 Jan 2020
+</td>
+<td style="text-align:right;">
+16:13
+</td>
+<td style="text-align:right;font-style: italic;">
+07:59
+</td>
+<td style="text-align:right;">
+15:46
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+14 Jan 2020
+</td>
+<td style="text-align:right;">
+16:14
+</td>
+<td style="text-align:right;font-style: italic;">
+07:58
+</td>
+<td style="text-align:right;">
+15:44
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+15 Jan 2020
+</td>
+<td style="text-align:right;">
+16:16
+</td>
+<td style="text-align:right;font-style: italic;">
+07:57
+</td>
+<td style="text-align:right;">
+15:41
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+16 Jan 2020
+</td>
+<td style="text-align:right;">
+16:17
+</td>
+<td style="text-align:right;font-style: italic;">
+07:56
+</td>
+<td style="text-align:right;">
+15:39
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+17 Jan 2020
+</td>
+<td style="text-align:right;">
+16:19
+</td>
+<td style="text-align:right;font-style: italic;">
+07:55
+</td>
+<td style="text-align:right;">
+15:36
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+18 Jan 2020
+</td>
+<td style="text-align:right;">
+16:21
+</td>
+<td style="text-align:right;font-style: italic;">
+07:54
+</td>
+<td style="text-align:right;">
+15:34
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+19 Jan 2020
+</td>
+<td style="text-align:right;">
+16:22
+</td>
+<td style="text-align:right;font-style: italic;">
+07:53
+</td>
+<td style="text-align:right;">
+15:31
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+20 Jan 2020
+</td>
+<td style="text-align:right;">
+16:24
+</td>
+<td style="text-align:right;font-style: italic;">
+07:52
+</td>
+<td style="text-align:right;">
+15:28
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+21 Jan 2020
+</td>
+<td style="text-align:right;">
+16:26
+</td>
+<td style="text-align:right;font-style: italic;">
+07:51
+</td>
+<td style="text-align:right;">
+15:25
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+22 Jan 2020
+</td>
+<td style="text-align:right;">
+16:27
+</td>
+<td style="text-align:right;font-style: italic;">
+07:50
+</td>
+<td style="text-align:right;">
+15:23
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+23 Jan 2020
+</td>
+<td style="text-align:right;">
+16:29
+</td>
+<td style="text-align:right;font-style: italic;">
+07:49
+</td>
+<td style="text-align:right;">
+15:20
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+24 Jan 2020
+</td>
+<td style="text-align:right;">
+16:31
+</td>
+<td style="text-align:right;font-style: italic;">
+07:47
+</td>
+<td style="text-align:right;">
+15:17
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+25 Jan 2020
+</td>
+<td style="text-align:right;">
+16:32
+</td>
+<td style="text-align:right;font-style: italic;">
+07:46
+</td>
+<td style="text-align:right;">
+15:14
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+26 Jan 2020
+</td>
+<td style="text-align:right;">
+16:34
+</td>
+<td style="text-align:right;font-style: italic;">
+07:45
+</td>
+<td style="text-align:right;">
+15:10
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+27 Jan 2020
+</td>
+<td style="text-align:right;">
+16:36
+</td>
+<td style="text-align:right;font-style: italic;">
+07:43
+</td>
+<td style="text-align:right;">
+15:07
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+28 Jan 2020
+</td>
+<td style="text-align:right;">
+16:38
+</td>
+<td style="text-align:right;font-style: italic;">
+07:42
+</td>
+<td style="text-align:right;">
+15:04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+29 Jan 2020
+</td>
+<td style="text-align:right;">
+16:40
+</td>
+<td style="text-align:right;font-style: italic;">
+07:41
+</td>
+<td style="text-align:right;">
+15:01
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+30 Jan 2020
+</td>
+<td style="text-align:right;">
+16:41
+</td>
+<td style="text-align:right;font-style: italic;">
+07:39
+</td>
+<td style="text-align:right;">
+14:58
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+31 Jan 2020
+</td>
+<td style="text-align:right;">
+16:43
+</td>
+<td style="text-align:right;font-style: italic;">
+07:38
+</td>
+<td style="text-align:right;">
+14:54
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+1 Feb 2020
+</td>
+<td style="text-align:right;">
+16:45
+</td>
+<td style="text-align:right;font-style: italic;">
+07:36
+</td>
+<td style="text-align:right;">
+14:51
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+2 Feb 2020
+</td>
+<td style="text-align:right;">
+16:47
+</td>
+<td style="text-align:right;font-style: italic;">
+07:34
+</td>
+<td style="text-align:right;">
+14:47
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+3 Feb 2020
+</td>
+<td style="text-align:right;">
+16:49
+</td>
+<td style="text-align:right;font-style: italic;">
+07:33
+</td>
+<td style="text-align:right;">
+14:44
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+4 Feb 2020
+</td>
+<td style="text-align:right;">
+16:51
+</td>
+<td style="text-align:right;font-style: italic;">
+07:31
+</td>
+<td style="text-align:right;">
+14:41
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+5 Feb 2020
+</td>
+<td style="text-align:right;">
+16:52
+</td>
+<td style="text-align:right;font-style: italic;">
+07:29
+</td>
+<td style="text-align:right;">
+14:37
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+6 Feb 2020
+</td>
+<td style="text-align:right;">
+16:54
+</td>
+<td style="text-align:right;font-style: italic;">
+07:28
+</td>
+<td style="text-align:right;">
+14:33
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+7 Feb 2020
+</td>
+<td style="text-align:right;">
+16:56
+</td>
+<td style="text-align:right;font-style: italic;">
+07:26
+</td>
+<td style="text-align:right;">
+14:30
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+8 Feb 2020
+</td>
+<td style="text-align:right;">
+16:58
+</td>
+<td style="text-align:right;font-style: italic;">
+07:24
+</td>
+<td style="text-align:right;">
+14:26
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+9 Feb 2020
+</td>
+<td style="text-align:right;">
+17:00
+</td>
+<td style="text-align:right;font-style: italic;">
+07:22
+</td>
+<td style="text-align:right;">
+14:23
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+10 Feb 2020
+</td>
+<td style="text-align:right;">
+17:02
+</td>
+<td style="text-align:right;font-style: italic;">
+07:21
+</td>
+<td style="text-align:right;">
+14:19
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+11 Feb 2020
+</td>
+<td style="text-align:right;">
+17:04
+</td>
+<td style="text-align:right;font-style: italic;">
+07:19
+</td>
+<td style="text-align:right;">
+14:15
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+12 Feb 2020
+</td>
+<td style="text-align:right;">
+17:05
+</td>
+<td style="text-align:right;font-style: italic;">
+07:17
+</td>
+<td style="text-align:right;">
+14:12
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+13 Feb 2020
+</td>
+<td style="text-align:right;">
+17:07
+</td>
+<td style="text-align:right;font-style: italic;">
+07:15
+</td>
+<td style="text-align:right;">
+14:08
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+14 Feb 2020
+</td>
+<td style="text-align:right;">
+17:09
+</td>
+<td style="text-align:right;font-style: italic;">
+07:13
+</td>
+<td style="text-align:right;">
+14:04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+15 Feb 2020
+</td>
+<td style="text-align:right;">
+17:11
+</td>
+<td style="text-align:right;font-style: italic;">
+07:11
+</td>
+<td style="text-align:right;">
+14:00
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+16 Feb 2020
+</td>
+<td style="text-align:right;">
+17:13
+</td>
+<td style="text-align:right;font-style: italic;">
+07:09
+</td>
+<td style="text-align:right;">
+13:56
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+17 Feb 2020
+</td>
+<td style="text-align:right;">
+17:15
+</td>
+<td style="text-align:right;font-style: italic;">
+07:07
+</td>
+<td style="text-align:right;">
+13:53
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+18 Feb 2020
+</td>
+<td style="text-align:right;">
+17:16
+</td>
+<td style="text-align:right;font-style: italic;">
+07:05
+</td>
+<td style="text-align:right;">
+13:49
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+19 Feb 2020
+</td>
+<td style="text-align:right;">
+17:18
+</td>
+<td style="text-align:right;font-style: italic;">
+07:03
+</td>
+<td style="text-align:right;">
+13:45
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+20 Feb 2020
+</td>
+<td style="text-align:right;">
+17:20
+</td>
+<td style="text-align:right;font-style: italic;">
+07:01
+</td>
+<td style="text-align:right;">
+13:41
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+21 Feb 2020
+</td>
+<td style="text-align:right;">
+17:22
+</td>
+<td style="text-align:right;font-style: italic;">
+06:59
+</td>
+<td style="text-align:right;">
+13:37
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+22 Feb 2020
+</td>
+<td style="text-align:right;">
+17:24
+</td>
+<td style="text-align:right;font-style: italic;">
+06:57
+</td>
+<td style="text-align:right;">
+13:33
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+23 Feb 2020
+</td>
+<td style="text-align:right;">
+17:26
+</td>
+<td style="text-align:right;font-style: italic;">
+06:55
+</td>
+<td style="text-align:right;">
+13:29
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+24 Feb 2020
+</td>
+<td style="text-align:right;">
+17:27
+</td>
+<td style="text-align:right;font-style: italic;">
+06:53
+</td>
+<td style="text-align:right;">
+13:25
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+25 Feb 2020
+</td>
+<td style="text-align:right;">
+17:29
+</td>
+<td style="text-align:right;font-style: italic;">
+06:51
+</td>
+<td style="text-align:right;">
+13:22
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+26 Feb 2020
+</td>
+<td style="text-align:right;">
+17:31
+</td>
+<td style="text-align:right;font-style: italic;">
+06:49
+</td>
+<td style="text-align:right;">
+13:18
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+27 Feb 2020
+</td>
+<td style="text-align:right;">
+17:33
+</td>
+<td style="text-align:right;font-style: italic;">
+06:46
+</td>
+<td style="text-align:right;">
+13:14
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+28 Feb 2020
+</td>
+<td style="text-align:right;">
+17:35
+</td>
+<td style="text-align:right;font-style: italic;">
+06:44
+</td>
+<td style="text-align:right;">
+13:10
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+29 Feb 2020
+</td>
+<td style="text-align:right;">
+17:36
+</td>
+<td style="text-align:right;font-style: italic;">
+06:42
+</td>
+<td style="text-align:right;">
+13:06
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+1 Mar 2020
+</td>
+<td style="text-align:right;">
+17:38
+</td>
+<td style="text-align:right;font-style: italic;">
+06:40
+</td>
+<td style="text-align:right;">
+13:02
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+2 Mar 2020
+</td>
+<td style="text-align:right;">
+17:40
+</td>
+<td style="text-align:right;font-style: italic;">
+06:38
+</td>
+<td style="text-align:right;">
+12:58
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+3 Mar 2020
+</td>
+<td style="text-align:right;">
+17:42
+</td>
+<td style="text-align:right;font-style: italic;">
+06:36
+</td>
+<td style="text-align:right;">
+12:54
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+4 Mar 2020
+</td>
+<td style="text-align:right;">
+17:43
+</td>
+<td style="text-align:right;font-style: italic;">
+06:33
+</td>
+<td style="text-align:right;">
+12:50
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+5 Mar 2020
+</td>
+<td style="text-align:right;">
+17:45
+</td>
+<td style="text-align:right;font-style: italic;">
+06:31
+</td>
+<td style="text-align:right;">
+12:46
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+6 Mar 2020
+</td>
+<td style="text-align:right;">
+17:47
+</td>
+<td style="text-align:right;font-style: italic;">
+06:29
+</td>
+<td style="text-align:right;">
+12:42
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+7 Mar 2020
+</td>
+<td style="text-align:right;">
+17:49
+</td>
+<td style="text-align:right;font-style: italic;">
+06:27
+</td>
+<td style="text-align:right;">
+12:38
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+8 Mar 2020
+</td>
+<td style="text-align:right;">
+17:51
+</td>
+<td style="text-align:right;font-style: italic;">
+06:24
+</td>
+<td style="text-align:right;">
+12:34
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+9 Mar 2020
+</td>
+<td style="text-align:right;">
+17:52
+</td>
+<td style="text-align:right;font-style: italic;">
+06:22
+</td>
+<td style="text-align:right;">
+12:30
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+10 Mar 2020
+</td>
+<td style="text-align:right;">
+17:54
+</td>
+<td style="text-align:right;font-style: italic;">
+06:20
+</td>
+<td style="text-align:right;">
+12:26
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+11 Mar 2020
+</td>
+<td style="text-align:right;">
+17:56
+</td>
+<td style="text-align:right;font-style: italic;">
+06:18
+</td>
+<td style="text-align:right;">
+12:22
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+12 Mar 2020
+</td>
+<td style="text-align:right;">
+17:57
+</td>
+<td style="text-align:right;font-style: italic;">
+06:15
+</td>
+<td style="text-align:right;">
+12:18
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+13 Mar 2020
+</td>
+<td style="text-align:right;">
+17:59
+</td>
+<td style="text-align:right;font-style: italic;">
+06:13
+</td>
+<td style="text-align:right;">
+12:14
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+14 Mar 2020
+</td>
+<td style="text-align:right;">
+18:01
+</td>
+<td style="text-align:right;font-style: italic;">
+06:11
+</td>
+<td style="text-align:right;">
+12:10
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+15 Mar 2020
+</td>
+<td style="text-align:right;">
+18:03
+</td>
+<td style="text-align:right;font-style: italic;">
+06:08
+</td>
+<td style="text-align:right;">
+12:06
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+16 Mar 2020
+</td>
+<td style="text-align:right;">
+18:04
+</td>
+<td style="text-align:right;font-style: italic;">
+06:06
+</td>
+<td style="text-align:right;">
+12:02
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+17 Mar 2020
+</td>
+<td style="text-align:right;">
+18:06
+</td>
+<td style="text-align:right;font-style: italic;">
+06:04
+</td>
+<td style="text-align:right;">
+11:58
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+18 Mar 2020
+</td>
+<td style="text-align:right;">
+18:08
+</td>
+<td style="text-align:right;font-style: italic;">
+06:02
+</td>
+<td style="text-align:right;">
+11:54
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+19 Mar 2020
+</td>
+<td style="text-align:right;">
+18:10
+</td>
+<td style="text-align:right;font-style: italic;">
+05:59
+</td>
+<td style="text-align:right;">
+11:50
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+20 Mar 2020
+</td>
+<td style="text-align:right;">
+18:11
+</td>
+<td style="text-align:right;font-style: italic;">
+05:57
+</td>
+<td style="text-align:right;">
+11:46
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+21 Mar 2020
+</td>
+<td style="text-align:right;">
+18:13
+</td>
+<td style="text-align:right;font-style: italic;">
+05:55
+</td>
+<td style="text-align:right;">
+11:42
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+22 Mar 2020
+</td>
+<td style="text-align:right;">
+18:15
+</td>
+<td style="text-align:right;font-style: italic;">
+05:52
+</td>
+<td style="text-align:right;">
+11:38
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+23 Mar 2020
+</td>
+<td style="text-align:right;">
+18:16
+</td>
+<td style="text-align:right;font-style: italic;">
+05:50
+</td>
+<td style="text-align:right;">
+11:34
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+24 Mar 2020
+</td>
+<td style="text-align:right;">
+18:18
+</td>
+<td style="text-align:right;font-style: italic;">
+05:48
+</td>
+<td style="text-align:right;">
+11:30
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+25 Mar 2020
+</td>
+<td style="text-align:right;">
+18:20
+</td>
+<td style="text-align:right;font-style: italic;">
+05:45
+</td>
+<td style="text-align:right;">
+11:26
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+26 Mar 2020
+</td>
+<td style="text-align:right;">
+18:21
+</td>
+<td style="text-align:right;font-style: italic;">
+05:43
+</td>
+<td style="text-align:right;">
+11:22
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+27 Mar 2020
+</td>
+<td style="text-align:right;">
+18:23
+</td>
+<td style="text-align:right;font-style: italic;">
+05:41
+</td>
+<td style="text-align:right;">
+11:18
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+28 Mar 2020
+</td>
+<td style="text-align:right;">
+18:25
+</td>
+<td style="text-align:right;font-style: italic;">
+06:39
+</td>
+<td style="text-align:right;">
+11:14
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+29 Mar 2020
+</td>
+<td style="text-align:right;">
+19:27
+</td>
+<td style="text-align:right;font-style: italic;">
+06:36
+</td>
+<td style="text-align:right;">
+11:10
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+30 Mar 2020
+</td>
+<td style="text-align:right;">
+19:28
+</td>
+<td style="text-align:right;font-style: italic;">
+06:34
+</td>
+<td style="text-align:right;">
+11:06
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+31 Mar 2020
+</td>
+<td style="text-align:right;">
+19:30
+</td>
+<td style="text-align:right;font-style: italic;">
+06:32
+</td>
+<td style="text-align:right;">
+11:02
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+1 Apr 2020
+</td>
+<td style="text-align:right;">
+19:32
+</td>
+<td style="text-align:right;font-style: italic;">
+06:29
+</td>
+<td style="text-align:right;">
+10:58
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+2 Apr 2020
+</td>
+<td style="text-align:right;">
+19:33
+</td>
+<td style="text-align:right;font-style: italic;">
+06:27
+</td>
+<td style="text-align:right;">
+10:54
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+3 Apr 2020
+</td>
+<td style="text-align:right;">
+19:35
+</td>
+<td style="text-align:right;font-style: italic;">
+06:25
+</td>
+<td style="text-align:right;">
+10:50
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+4 Apr 2020
+</td>
+<td style="text-align:right;">
+19:37
+</td>
+<td style="text-align:right;font-style: italic;">
+06:23
+</td>
+<td style="text-align:right;">
+10:46
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+5 Apr 2020
+</td>
+<td style="text-align:right;">
+19:38
+</td>
+<td style="text-align:right;font-style: italic;">
+06:20
+</td>
+<td style="text-align:right;">
+10:42
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+6 Apr 2020
+</td>
+<td style="text-align:right;">
+19:40
+</td>
+<td style="text-align:right;font-style: italic;">
+06:18
+</td>
+<td style="text-align:right;">
+10:38
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+7 Apr 2020
+</td>
+<td style="text-align:right;">
+19:42
+</td>
+<td style="text-align:right;font-style: italic;">
+06:16
+</td>
+<td style="text-align:right;">
+10:34
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+8 Apr 2020
+</td>
+<td style="text-align:right;">
+19:44
+</td>
+<td style="text-align:right;font-style: italic;">
+06:14
+</td>
+<td style="text-align:right;">
+10:30
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+9 Apr 2020
+</td>
+<td style="text-align:right;">
+19:45
+</td>
+<td style="text-align:right;font-style: italic;">
+06:11
+</td>
+<td style="text-align:right;">
+10:26
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+10 Apr 2020
+</td>
+<td style="text-align:right;">
+19:47
+</td>
+<td style="text-align:right;font-style: italic;">
+06:09
+</td>
+<td style="text-align:right;">
+10:22
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+11 Apr 2020
+</td>
+<td style="text-align:right;">
+19:49
+</td>
+<td style="text-align:right;font-style: italic;">
+06:07
+</td>
+<td style="text-align:right;">
+10:18
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+12 Apr 2020
+</td>
+<td style="text-align:right;">
+19:50
+</td>
+<td style="text-align:right;font-style: italic;">
+06:05
+</td>
+<td style="text-align:right;">
+10:15
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+13 Apr 2020
+</td>
+<td style="text-align:right;">
+19:52
+</td>
+<td style="text-align:right;font-style: italic;">
+06:03
+</td>
+<td style="text-align:right;">
+10:11
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+14 Apr 2020
+</td>
+<td style="text-align:right;">
+19:54
+</td>
+<td style="text-align:right;font-style: italic;">
+06:00
+</td>
+<td style="text-align:right;">
+10:07
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+15 Apr 2020
+</td>
+<td style="text-align:right;">
+19:55
+</td>
+<td style="text-align:right;font-style: italic;">
+05:58
+</td>
+<td style="text-align:right;">
+10:03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+16 Apr 2020
+</td>
+<td style="text-align:right;">
+19:57
+</td>
+<td style="text-align:right;font-style: italic;">
+05:56
+</td>
+<td style="text-align:right;">
+09:59
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+17 Apr 2020
+</td>
+<td style="text-align:right;">
+19:59
+</td>
+<td style="text-align:right;font-style: italic;">
+05:54
+</td>
+<td style="text-align:right;">
+09:55
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+18 Apr 2020
+</td>
+<td style="text-align:right;">
+20:00
+</td>
+<td style="text-align:right;font-style: italic;">
+05:52
+</td>
+<td style="text-align:right;">
+09:51
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+19 Apr 2020
+</td>
+<td style="text-align:right;">
+20:02
+</td>
+<td style="text-align:right;font-style: italic;">
+05:50
+</td>
+<td style="text-align:right;">
+09:48
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+20 Apr 2020
+</td>
+<td style="text-align:right;">
+20:04
+</td>
+<td style="text-align:right;font-style: italic;">
+05:48
+</td>
+<td style="text-align:right;">
+09:44
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+21 Apr 2020
+</td>
+<td style="text-align:right;">
+20:06
+</td>
+<td style="text-align:right;font-style: italic;">
+05:46
+</td>
+<td style="text-align:right;">
+09:40
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+22 Apr 2020
+</td>
+<td style="text-align:right;">
+20:07
+</td>
+<td style="text-align:right;font-style: italic;">
+05:44
+</td>
+<td style="text-align:right;">
+09:36
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+23 Apr 2020
+</td>
+<td style="text-align:right;">
+20:09
+</td>
+<td style="text-align:right;font-style: italic;">
+05:42
+</td>
+<td style="text-align:right;">
+09:33
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+24 Apr 2020
+</td>
+<td style="text-align:right;">
+20:11
+</td>
+<td style="text-align:right;font-style: italic;">
+05:40
+</td>
+<td style="text-align:right;">
+09:29
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+25 Apr 2020
+</td>
+<td style="text-align:right;">
+20:12
+</td>
+<td style="text-align:right;font-style: italic;">
+05:38
+</td>
+<td style="text-align:right;">
+09:25
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+26 Apr 2020
+</td>
+<td style="text-align:right;">
+20:14
+</td>
+<td style="text-align:right;font-style: italic;">
+05:36
+</td>
+<td style="text-align:right;">
+09:22
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+27 Apr 2020
+</td>
+<td style="text-align:right;">
+20:16
+</td>
+<td style="text-align:right;font-style: italic;">
+05:34
+</td>
+<td style="text-align:right;">
+09:18
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+28 Apr 2020
+</td>
+<td style="text-align:right;">
+20:17
+</td>
+<td style="text-align:right;font-style: italic;">
+05:32
+</td>
+<td style="text-align:right;">
+09:14
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+29 Apr 2020
+</td>
+<td style="text-align:right;">
+20:19
+</td>
+<td style="text-align:right;font-style: italic;">
+05:30
+</td>
+<td style="text-align:right;">
+09:11
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+30 Apr 2020
+</td>
+<td style="text-align:right;">
+20:21
+</td>
+<td style="text-align:right;font-style: italic;">
+05:28
+</td>
+<td style="text-align:right;">
+09:07
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+1 May 2020
+</td>
+<td style="text-align:right;">
+20:22
+</td>
+<td style="text-align:right;font-style: italic;">
+05:26
+</td>
+<td style="text-align:right;">
+09:04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+2 May 2020
+</td>
+<td style="text-align:right;">
+20:24
+</td>
+<td style="text-align:right;font-style: italic;">
+05:24
+</td>
+<td style="text-align:right;">
+09:00
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+3 May 2020
+</td>
+<td style="text-align:right;">
+20:26
+</td>
+<td style="text-align:right;font-style: italic;">
+05:22
+</td>
+<td style="text-align:right;">
+08:57
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+4 May 2020
+</td>
+<td style="text-align:right;">
+20:27
+</td>
+<td style="text-align:right;font-style: italic;">
+05:20
+</td>
+<td style="text-align:right;">
+08:53
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+5 May 2020
+</td>
+<td style="text-align:right;">
+20:29
+</td>
+<td style="text-align:right;font-style: italic;">
+05:19
+</td>
+<td style="text-align:right;">
+08:50
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+6 May 2020
+</td>
+<td style="text-align:right;">
+20:30
+</td>
+<td style="text-align:right;font-style: italic;">
+05:17
+</td>
+<td style="text-align:right;">
+08:47
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+7 May 2020
+</td>
+<td style="text-align:right;">
+20:32
+</td>
+<td style="text-align:right;font-style: italic;">
+05:15
+</td>
+<td style="text-align:right;">
+08:43
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+8 May 2020
+</td>
+<td style="text-align:right;">
+20:34
+</td>
+<td style="text-align:right;font-style: italic;">
+05:14
+</td>
+<td style="text-align:right;">
+08:40
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+9 May 2020
+</td>
+<td style="text-align:right;">
+20:35
+</td>
+<td style="text-align:right;font-style: italic;">
+05:12
+</td>
+<td style="text-align:right;">
+08:37
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+10 May 2020
+</td>
+<td style="text-align:right;">
+20:37
+</td>
+<td style="text-align:right;font-style: italic;">
+05:10
+</td>
+<td style="text-align:right;">
+08:33
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+11 May 2020
+</td>
+<td style="text-align:right;">
+20:38
+</td>
+<td style="text-align:right;font-style: italic;">
+05:09
+</td>
+<td style="text-align:right;">
+08:30
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+12 May 2020
+</td>
+<td style="text-align:right;">
+20:40
+</td>
+<td style="text-align:right;font-style: italic;">
+05:07
+</td>
+<td style="text-align:right;">
+08:27
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+13 May 2020
+</td>
+<td style="text-align:right;">
+20:42
+</td>
+<td style="text-align:right;font-style: italic;">
+05:06
+</td>
+<td style="text-align:right;">
+08:24
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+14 May 2020
+</td>
+<td style="text-align:right;">
+20:43
+</td>
+<td style="text-align:right;font-style: italic;">
+05:04
+</td>
+<td style="text-align:right;">
+08:21
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+15 May 2020
+</td>
+<td style="text-align:right;">
+20:45
+</td>
+<td style="text-align:right;font-style: italic;">
+05:03
+</td>
+<td style="text-align:right;">
+08:18
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+16 May 2020
+</td>
+<td style="text-align:right;">
+20:46
+</td>
+<td style="text-align:right;font-style: italic;">
+05:01
+</td>
+<td style="text-align:right;">
+08:15
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+17 May 2020
+</td>
+<td style="text-align:right;">
+20:48
+</td>
+<td style="text-align:right;font-style: italic;">
+05:00
+</td>
+<td style="text-align:right;">
+08:12
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+18 May 2020
+</td>
+<td style="text-align:right;">
+20:49
+</td>
+<td style="text-align:right;font-style: italic;">
+04:58
+</td>
+<td style="text-align:right;">
+08:09
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+19 May 2020
+</td>
+<td style="text-align:right;">
+20:50
+</td>
+<td style="text-align:right;font-style: italic;">
+04:57
+</td>
+<td style="text-align:right;">
+08:07
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+20 May 2020
+</td>
+<td style="text-align:right;">
+20:52
+</td>
+<td style="text-align:right;font-style: italic;">
+04:56
+</td>
+<td style="text-align:right;">
+08:04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+21 May 2020
+</td>
+<td style="text-align:right;">
+20:53
+</td>
+<td style="text-align:right;font-style: italic;">
+04:55
+</td>
+<td style="text-align:right;">
+08:01
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+22 May 2020
+</td>
+<td style="text-align:right;">
+20:55
+</td>
+<td style="text-align:right;font-style: italic;">
+04:53
+</td>
+<td style="text-align:right;">
+07:59
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+23 May 2020
+</td>
+<td style="text-align:right;">
+20:56
+</td>
+<td style="text-align:right;font-style: italic;">
+04:52
+</td>
+<td style="text-align:right;">
+07:56
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+24 May 2020
+</td>
+<td style="text-align:right;">
+20:57
+</td>
+<td style="text-align:right;font-style: italic;">
+04:51
+</td>
+<td style="text-align:right;">
+07:54
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+25 May 2020
+</td>
+<td style="text-align:right;">
+20:59
+</td>
+<td style="text-align:right;font-style: italic;">
+04:50
+</td>
+<td style="text-align:right;">
+07:51
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+26 May 2020
+</td>
+<td style="text-align:right;">
+21:00
+</td>
+<td style="text-align:right;font-style: italic;">
+04:49
+</td>
+<td style="text-align:right;">
+07:49
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+27 May 2020
+</td>
+<td style="text-align:right;">
+21:01
+</td>
+<td style="text-align:right;font-style: italic;">
+04:48
+</td>
+<td style="text-align:right;">
+07:47
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+28 May 2020
+</td>
+<td style="text-align:right;">
+21:02
+</td>
+<td style="text-align:right;font-style: italic;">
+04:47
+</td>
+<td style="text-align:right;">
+07:44
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+29 May 2020
+</td>
+<td style="text-align:right;">
+21:04
+</td>
+<td style="text-align:right;font-style: italic;">
+04:46
+</td>
+<td style="text-align:right;">
+07:42
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+30 May 2020
+</td>
+<td style="text-align:right;">
+21:05
+</td>
+<td style="text-align:right;font-style: italic;">
+04:45
+</td>
+<td style="text-align:right;">
+07:40
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+31 May 2020
+</td>
+<td style="text-align:right;">
+21:06
+</td>
+<td style="text-align:right;font-style: italic;">
+04:44
+</td>
+<td style="text-align:right;">
+07:38
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+1 Jun 2020
+</td>
+<td style="text-align:right;">
+21:07
+</td>
+<td style="text-align:right;font-style: italic;">
+04:44
+</td>
+<td style="text-align:right;">
+07:37
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+2 Jun 2020
+</td>
+<td style="text-align:right;">
+21:08
+</td>
+<td style="text-align:right;font-style: italic;">
+04:43
+</td>
+<td style="text-align:right;">
+07:35
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+3 Jun 2020
+</td>
+<td style="text-align:right;">
+21:09
+</td>
+<td style="text-align:right;font-style: italic;">
+04:42
+</td>
+<td style="text-align:right;">
+07:33
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+4 Jun 2020
+</td>
+<td style="text-align:right;">
+21:10
+</td>
+<td style="text-align:right;font-style: italic;">
+04:42
+</td>
+<td style="text-align:right;">
+07:32
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+5 Jun 2020
+</td>
+<td style="text-align:right;">
+21:11
+</td>
+<td style="text-align:right;font-style: italic;">
+04:41
+</td>
+<td style="text-align:right;">
+07:30
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+6 Jun 2020
+</td>
+<td style="text-align:right;">
+21:12
+</td>
+<td style="text-align:right;font-style: italic;">
+04:41
+</td>
+<td style="text-align:right;">
+07:29
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+7 Jun 2020
+</td>
+<td style="text-align:right;">
+21:13
+</td>
+<td style="text-align:right;font-style: italic;">
+04:40
+</td>
+<td style="text-align:right;">
+07:27
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+8 Jun 2020
+</td>
+<td style="text-align:right;">
+21:14
+</td>
+<td style="text-align:right;font-style: italic;">
+04:40
+</td>
+<td style="text-align:right;">
+07:26
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+9 Jun 2020
+</td>
+<td style="text-align:right;">
+21:14
+</td>
+<td style="text-align:right;font-style: italic;">
+04:39
+</td>
+<td style="text-align:right;">
+07:25
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+10 Jun 2020
+</td>
+<td style="text-align:right;">
+21:15
+</td>
+<td style="text-align:right;font-style: italic;">
+04:39
+</td>
+<td style="text-align:right;">
+07:24
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+11 Jun 2020
+</td>
+<td style="text-align:right;">
+21:16
+</td>
+<td style="text-align:right;font-style: italic;">
+04:39
+</td>
+<td style="text-align:right;">
+07:23
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+12 Jun 2020
+</td>
+<td style="text-align:right;">
+21:16
+</td>
+<td style="text-align:right;font-style: italic;">
+04:38
+</td>
+<td style="text-align:right;">
+07:22
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+13 Jun 2020
+</td>
+<td style="text-align:right;">
+21:17
+</td>
+<td style="text-align:right;font-style: italic;">
+04:38
+</td>
+<td style="text-align:right;">
+07:21
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+14 Jun 2020
+</td>
+<td style="text-align:right;">
+21:18
+</td>
+<td style="text-align:right;font-style: italic;">
+04:38
+</td>
+<td style="text-align:right;">
+07:21
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+15 Jun 2020
+</td>
+<td style="text-align:right;">
+21:18
+</td>
+<td style="text-align:right;font-style: italic;">
+04:38
+</td>
+<td style="text-align:right;">
+07:20
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+16 Jun 2020
+</td>
+<td style="text-align:right;">
+21:19
+</td>
+<td style="text-align:right;font-style: italic;">
+04:38
+</td>
+<td style="text-align:right;">
+07:20
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+17 Jun 2020
+</td>
+<td style="text-align:right;">
+21:19
+</td>
+<td style="text-align:right;font-style: italic;">
+04:38
+</td>
+<td style="text-align:right;">
+07:19
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+18 Jun 2020
+</td>
+<td style="text-align:right;">
+21:19
+</td>
+<td style="text-align:right;font-style: italic;">
+04:38
+</td>
+<td style="text-align:right;">
+07:19
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+19 Jun 2020
+</td>
+<td style="text-align:right;">
+21:20
+</td>
+<td style="text-align:right;font-style: italic;">
+04:38
+</td>
+<td style="text-align:right;">
+07:19
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+20 Jun 2020
+</td>
+<td style="text-align:right;">
+21:20
+</td>
+<td style="text-align:right;font-style: italic;">
+04:39
+</td>
+<td style="text-align:right;">
+07:19
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+21 Jun 2020
+</td>
+<td style="text-align:right;">
+21:20
+</td>
+<td style="text-align:right;font-style: italic;">
+04:39
+</td>
+<td style="text-align:right;">
+07:19
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+22 Jun 2020
+</td>
+<td style="text-align:right;">
+21:20
+</td>
+<td style="text-align:right;font-style: italic;">
+04:39
+</td>
+<td style="text-align:right;">
+07:19
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+23 Jun 2020
+</td>
+<td style="text-align:right;">
+21:20
+</td>
+<td style="text-align:right;font-style: italic;">
+04:40
+</td>
+<td style="text-align:right;">
+07:19
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+24 Jun 2020
+</td>
+<td style="text-align:right;">
+21:20
+</td>
+<td style="text-align:right;font-style: italic;">
+04:40
+</td>
+<td style="text-align:right;">
+07:20
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+25 Jun 2020
+</td>
+<td style="text-align:right;">
+21:20
+</td>
+<td style="text-align:right;font-style: italic;">
+04:40
+</td>
+<td style="text-align:right;">
+07:20
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+26 Jun 2020
+</td>
+<td style="text-align:right;">
+21:20
+</td>
+<td style="text-align:right;font-style: italic;">
+04:41
+</td>
+<td style="text-align:right;">
+07:21
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+27 Jun 2020
+</td>
+<td style="text-align:right;">
+21:20
+</td>
+<td style="text-align:right;font-style: italic;">
+04:42
+</td>
+<td style="text-align:right;">
+07:21
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+28 Jun 2020
+</td>
+<td style="text-align:right;">
+21:20
+</td>
+<td style="text-align:right;font-style: italic;">
+04:42
+</td>
+<td style="text-align:right;">
+07:22
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+29 Jun 2020
+</td>
+<td style="text-align:right;">
+21:20
+</td>
+<td style="text-align:right;font-style: italic;">
+04:43
+</td>
+<td style="text-align:right;">
+07:23
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+30 Jun 2020
+</td>
+<td style="text-align:right;">
+21:19
+</td>
+<td style="text-align:right;font-style: italic;">
+04:43
+</td>
+<td style="text-align:right;">
+07:24
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+1 Jul 2020
+</td>
+<td style="text-align:right;">
+21:19
+</td>
+<td style="text-align:right;font-style: italic;">
+04:44
+</td>
+<td style="text-align:right;">
+07:25
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+2 Jul 2020
+</td>
+<td style="text-align:right;">
+21:19
+</td>
+<td style="text-align:right;font-style: italic;">
+04:45
+</td>
+<td style="text-align:right;">
+07:26
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+3 Jul 2020
+</td>
+<td style="text-align:right;">
+21:18
+</td>
+<td style="text-align:right;font-style: italic;">
+04:46
+</td>
+<td style="text-align:right;">
+07:27
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+4 Jul 2020
+</td>
+<td style="text-align:right;">
+21:18
+</td>
+<td style="text-align:right;font-style: italic;">
+04:47
+</td>
+<td style="text-align:right;">
+07:29
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+5 Jul 2020
+</td>
+<td style="text-align:right;">
+21:17
+</td>
+<td style="text-align:right;font-style: italic;">
+04:47
+</td>
+<td style="text-align:right;">
+07:30
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+6 Jul 2020
+</td>
+<td style="text-align:right;">
+21:17
+</td>
+<td style="text-align:right;font-style: italic;">
+04:48
+</td>
+<td style="text-align:right;">
+07:32
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+7 Jul 2020
+</td>
+<td style="text-align:right;">
+21:16
+</td>
+<td style="text-align:right;font-style: italic;">
+04:49
+</td>
+<td style="text-align:right;">
+07:33
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+8 Jul 2020
+</td>
+<td style="text-align:right;">
+21:15
+</td>
+<td style="text-align:right;font-style: italic;">
+04:50
+</td>
+<td style="text-align:right;">
+07:35
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+9 Jul 2020
+</td>
+<td style="text-align:right;">
+21:15
+</td>
+<td style="text-align:right;font-style: italic;">
+04:51
+</td>
+<td style="text-align:right;">
+07:37
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+10 Jul 2020
+</td>
+<td style="text-align:right;">
+21:14
+</td>
+<td style="text-align:right;font-style: italic;">
+04:52
+</td>
+<td style="text-align:right;">
+07:39
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+11 Jul 2020
+</td>
+<td style="text-align:right;">
+21:13
+</td>
+<td style="text-align:right;font-style: italic;">
+04:54
+</td>
+<td style="text-align:right;">
+07:41
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+12 Jul 2020
+</td>
+<td style="text-align:right;">
+21:12
+</td>
+<td style="text-align:right;font-style: italic;">
+04:55
+</td>
+<td style="text-align:right;">
+07:43
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+13 Jul 2020
+</td>
+<td style="text-align:right;">
+21:11
+</td>
+<td style="text-align:right;font-style: italic;">
+04:56
+</td>
+<td style="text-align:right;">
+07:45
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+14 Jul 2020
+</td>
+<td style="text-align:right;">
+21:10
+</td>
+<td style="text-align:right;font-style: italic;">
+04:57
+</td>
+<td style="text-align:right;">
+07:47
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+15 Jul 2020
+</td>
+<td style="text-align:right;">
+21:09
+</td>
+<td style="text-align:right;font-style: italic;">
+04:58
+</td>
+<td style="text-align:right;">
+07:49
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+16 Jul 2020
+</td>
+<td style="text-align:right;">
+21:08
+</td>
+<td style="text-align:right;font-style: italic;">
+05:00
+</td>
+<td style="text-align:right;">
+07:51
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+17 Jul 2020
+</td>
+<td style="text-align:right;">
+21:07
+</td>
+<td style="text-align:right;font-style: italic;">
+05:01
+</td>
+<td style="text-align:right;">
+07:54
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+18 Jul 2020
+</td>
+<td style="text-align:right;">
+21:06
+</td>
+<td style="text-align:right;font-style: italic;">
+05:02
+</td>
+<td style="text-align:right;">
+07:56
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+19 Jul 2020
+</td>
+<td style="text-align:right;">
+21:05
+</td>
+<td style="text-align:right;font-style: italic;">
+05:03
+</td>
+<td style="text-align:right;">
+07:59
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+20 Jul 2020
+</td>
+<td style="text-align:right;">
+21:03
+</td>
+<td style="text-align:right;font-style: italic;">
+05:05
+</td>
+<td style="text-align:right;">
+08:01
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+21 Jul 2020
+</td>
+<td style="text-align:right;">
+21:02
+</td>
+<td style="text-align:right;font-style: italic;">
+05:06
+</td>
+<td style="text-align:right;">
+08:04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+22 Jul 2020
+</td>
+<td style="text-align:right;">
+21:01
+</td>
+<td style="text-align:right;font-style: italic;">
+05:08
+</td>
+<td style="text-align:right;">
+08:07
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+23 Jul 2020
+</td>
+<td style="text-align:right;">
+21:00
+</td>
+<td style="text-align:right;font-style: italic;">
+05:09
+</td>
+<td style="text-align:right;">
+08:09
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+24 Jul 2020
+</td>
+<td style="text-align:right;">
+20:58
+</td>
+<td style="text-align:right;font-style: italic;">
+05:10
+</td>
+<td style="text-align:right;">
+08:12
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+25 Jul 2020
+</td>
+<td style="text-align:right;">
+20:57
+</td>
+<td style="text-align:right;font-style: italic;">
+05:12
+</td>
+<td style="text-align:right;">
+08:15
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+26 Jul 2020
+</td>
+<td style="text-align:right;">
+20:55
+</td>
+<td style="text-align:right;font-style: italic;">
+05:13
+</td>
+<td style="text-align:right;">
+08:18
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+27 Jul 2020
+</td>
+<td style="text-align:right;">
+20:54
+</td>
+<td style="text-align:right;font-style: italic;">
+05:15
+</td>
+<td style="text-align:right;">
+08:21
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+28 Jul 2020
+</td>
+<td style="text-align:right;">
+20:52
+</td>
+<td style="text-align:right;font-style: italic;">
+05:16
+</td>
+<td style="text-align:right;">
+08:24
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+29 Jul 2020
+</td>
+<td style="text-align:right;">
+20:51
+</td>
+<td style="text-align:right;font-style: italic;">
+05:18
+</td>
+<td style="text-align:right;">
+08:27
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+30 Jul 2020
+</td>
+<td style="text-align:right;">
+20:49
+</td>
+<td style="text-align:right;font-style: italic;">
+05:19
+</td>
+<td style="text-align:right;">
+08:30
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+31 Jul 2020
+</td>
+<td style="text-align:right;">
+20:47
+</td>
+<td style="text-align:right;font-style: italic;">
+05:21
+</td>
+<td style="text-align:right;">
+08:33
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+1 Aug 2020
+</td>
+<td style="text-align:right;">
+20:46
+</td>
+<td style="text-align:right;font-style: italic;">
+05:22
+</td>
+<td style="text-align:right;">
+08:36
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+2 Aug 2020
+</td>
+<td style="text-align:right;">
+20:44
+</td>
+<td style="text-align:right;font-style: italic;">
+05:24
+</td>
+<td style="text-align:right;">
+08:40
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+3 Aug 2020
+</td>
+<td style="text-align:right;">
+20:42
+</td>
+<td style="text-align:right;font-style: italic;">
+05:25
+</td>
+<td style="text-align:right;">
+08:43
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+4 Aug 2020
+</td>
+<td style="text-align:right;">
+20:41
+</td>
+<td style="text-align:right;font-style: italic;">
+05:27
+</td>
+<td style="text-align:right;">
+08:46
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+5 Aug 2020
+</td>
+<td style="text-align:right;">
+20:39
+</td>
+<td style="text-align:right;font-style: italic;">
+05:28
+</td>
+<td style="text-align:right;">
+08:50
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+6 Aug 2020
+</td>
+<td style="text-align:right;">
+20:37
+</td>
+<td style="text-align:right;font-style: italic;">
+05:30
+</td>
+<td style="text-align:right;">
+08:53
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+7 Aug 2020
+</td>
+<td style="text-align:right;">
+20:35
+</td>
+<td style="text-align:right;font-style: italic;">
+05:32
+</td>
+<td style="text-align:right;">
+08:56
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+8 Aug 2020
+</td>
+<td style="text-align:right;">
+20:33
+</td>
+<td style="text-align:right;font-style: italic;">
+05:33
+</td>
+<td style="text-align:right;">
+09:00
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+9 Aug 2020
+</td>
+<td style="text-align:right;">
+20:32
+</td>
+<td style="text-align:right;font-style: italic;">
+05:35
+</td>
+<td style="text-align:right;">
+09:03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+10 Aug 2020
+</td>
+<td style="text-align:right;">
+20:30
+</td>
+<td style="text-align:right;font-style: italic;">
+05:36
+</td>
+<td style="text-align:right;">
+09:07
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+11 Aug 2020
+</td>
+<td style="text-align:right;">
+20:28
+</td>
+<td style="text-align:right;font-style: italic;">
+05:38
+</td>
+<td style="text-align:right;">
+09:10
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+12 Aug 2020
+</td>
+<td style="text-align:right;">
+20:26
+</td>
+<td style="text-align:right;font-style: italic;">
+05:40
+</td>
+<td style="text-align:right;">
+09:14
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+13 Aug 2020
+</td>
+<td style="text-align:right;">
+20:24
+</td>
+<td style="text-align:right;font-style: italic;">
+05:41
+</td>
+<td style="text-align:right;">
+09:17
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+14 Aug 2020
+</td>
+<td style="text-align:right;">
+20:22
+</td>
+<td style="text-align:right;font-style: italic;">
+05:43
+</td>
+<td style="text-align:right;">
+09:21
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+15 Aug 2020
+</td>
+<td style="text-align:right;">
+20:20
+</td>
+<td style="text-align:right;font-style: italic;">
+05:44
+</td>
+<td style="text-align:right;">
+09:25
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+16 Aug 2020
+</td>
+<td style="text-align:right;">
+20:18
+</td>
+<td style="text-align:right;font-style: italic;">
+05:46
+</td>
+<td style="text-align:right;">
+09:28
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+17 Aug 2020
+</td>
+<td style="text-align:right;">
+20:16
+</td>
+<td style="text-align:right;font-style: italic;">
+05:48
+</td>
+<td style="text-align:right;">
+09:32
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+18 Aug 2020
+</td>
+<td style="text-align:right;">
+20:14
+</td>
+<td style="text-align:right;font-style: italic;">
+05:49
+</td>
+<td style="text-align:right;">
+09:36
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+19 Aug 2020
+</td>
+<td style="text-align:right;">
+20:12
+</td>
+<td style="text-align:right;font-style: italic;">
+05:51
+</td>
+<td style="text-align:right;">
+09:39
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+20 Aug 2020
+</td>
+<td style="text-align:right;">
+20:10
+</td>
+<td style="text-align:right;font-style: italic;">
+05:52
+</td>
+<td style="text-align:right;">
+09:43
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+21 Aug 2020
+</td>
+<td style="text-align:right;">
+20:07
+</td>
+<td style="text-align:right;font-style: italic;">
+05:54
+</td>
+<td style="text-align:right;">
+09:47
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+22 Aug 2020
+</td>
+<td style="text-align:right;">
+20:05
+</td>
+<td style="text-align:right;font-style: italic;">
+05:56
+</td>
+<td style="text-align:right;">
+09:50
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+23 Aug 2020
+</td>
+<td style="text-align:right;">
+20:03
+</td>
+<td style="text-align:right;font-style: italic;">
+05:57
+</td>
+<td style="text-align:right;">
+09:54
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+24 Aug 2020
+</td>
+<td style="text-align:right;">
+20:01
+</td>
+<td style="text-align:right;font-style: italic;">
+05:59
+</td>
+<td style="text-align:right;">
+09:58
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+25 Aug 2020
+</td>
+<td style="text-align:right;">
+19:59
+</td>
+<td style="text-align:right;font-style: italic;">
+06:01
+</td>
+<td style="text-align:right;">
+10:02
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+26 Aug 2020
+</td>
+<td style="text-align:right;">
+19:57
+</td>
+<td style="text-align:right;font-style: italic;">
+06:02
+</td>
+<td style="text-align:right;">
+10:05
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+27 Aug 2020
+</td>
+<td style="text-align:right;">
+19:54
+</td>
+<td style="text-align:right;font-style: italic;">
+06:04
+</td>
+<td style="text-align:right;">
+10:09
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+28 Aug 2020
+</td>
+<td style="text-align:right;">
+19:52
+</td>
+<td style="text-align:right;font-style: italic;">
+06:05
+</td>
+<td style="text-align:right;">
+10:13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+29 Aug 2020
+</td>
+<td style="text-align:right;">
+19:50
+</td>
+<td style="text-align:right;font-style: italic;">
+06:07
+</td>
+<td style="text-align:right;">
+10:17
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+30 Aug 2020
+</td>
+<td style="text-align:right;">
+19:48
+</td>
+<td style="text-align:right;font-style: italic;">
+06:09
+</td>
+<td style="text-align:right;">
+10:21
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+31 Aug 2020
+</td>
+<td style="text-align:right;">
+19:46
+</td>
+<td style="text-align:right;font-style: italic;">
+06:10
+</td>
+<td style="text-align:right;">
+10:25
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+1 Sep 2020
+</td>
+<td style="text-align:right;">
+19:43
+</td>
+<td style="text-align:right;font-style: italic;">
+06:12
+</td>
+<td style="text-align:right;">
+10:28
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+2 Sep 2020
+</td>
+<td style="text-align:right;">
+19:41
+</td>
+<td style="text-align:right;font-style: italic;">
+06:13
+</td>
+<td style="text-align:right;">
+10:32
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+3 Sep 2020
+</td>
+<td style="text-align:right;">
+19:39
+</td>
+<td style="text-align:right;font-style: italic;">
+06:15
+</td>
+<td style="text-align:right;">
+10:36
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+4 Sep 2020
+</td>
+<td style="text-align:right;">
+19:37
+</td>
+<td style="text-align:right;font-style: italic;">
+06:17
+</td>
+<td style="text-align:right;">
+10:40
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+5 Sep 2020
+</td>
+<td style="text-align:right;">
+19:34
+</td>
+<td style="text-align:right;font-style: italic;">
+06:18
+</td>
+<td style="text-align:right;">
+10:44
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+6 Sep 2020
+</td>
+<td style="text-align:right;">
+19:32
+</td>
+<td style="text-align:right;font-style: italic;">
+06:20
+</td>
+<td style="text-align:right;">
+10:48
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+7 Sep 2020
+</td>
+<td style="text-align:right;">
+19:30
+</td>
+<td style="text-align:right;font-style: italic;">
+06:21
+</td>
+<td style="text-align:right;">
+10:52
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+8 Sep 2020
+</td>
+<td style="text-align:right;">
+19:27
+</td>
+<td style="text-align:right;font-style: italic;">
+06:23
+</td>
+<td style="text-align:right;">
+10:56
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+9 Sep 2020
+</td>
+<td style="text-align:right;">
+19:25
+</td>
+<td style="text-align:right;font-style: italic;">
+06:25
+</td>
+<td style="text-align:right;">
+11:00
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+10 Sep 2020
+</td>
+<td style="text-align:right;">
+19:23
+</td>
+<td style="text-align:right;font-style: italic;">
+06:26
+</td>
+<td style="text-align:right;">
+11:04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+11 Sep 2020
+</td>
+<td style="text-align:right;">
+19:21
+</td>
+<td style="text-align:right;font-style: italic;">
+06:28
+</td>
+<td style="text-align:right;">
+11:07
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+12 Sep 2020
+</td>
+<td style="text-align:right;">
+19:18
+</td>
+<td style="text-align:right;font-style: italic;">
+06:30
+</td>
+<td style="text-align:right;">
+11:11
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+13 Sep 2020
+</td>
+<td style="text-align:right;">
+19:16
+</td>
+<td style="text-align:right;font-style: italic;">
+06:31
+</td>
+<td style="text-align:right;">
+11:15
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+14 Sep 2020
+</td>
+<td style="text-align:right;">
+19:14
+</td>
+<td style="text-align:right;font-style: italic;">
+06:33
+</td>
+<td style="text-align:right;">
+11:19
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+15 Sep 2020
+</td>
+<td style="text-align:right;">
+19:11
+</td>
+<td style="text-align:right;font-style: italic;">
+06:34
+</td>
+<td style="text-align:right;">
+11:23
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+16 Sep 2020
+</td>
+<td style="text-align:right;">
+19:09
+</td>
+<td style="text-align:right;font-style: italic;">
+06:36
+</td>
+<td style="text-align:right;">
+11:27
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+17 Sep 2020
+</td>
+<td style="text-align:right;">
+19:07
+</td>
+<td style="text-align:right;font-style: italic;">
+06:38
+</td>
+<td style="text-align:right;">
+11:31
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+18 Sep 2020
+</td>
+<td style="text-align:right;">
+19:04
+</td>
+<td style="text-align:right;font-style: italic;">
+06:39
+</td>
+<td style="text-align:right;">
+11:35
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+19 Sep 2020
+</td>
+<td style="text-align:right;">
+19:02
+</td>
+<td style="text-align:right;font-style: italic;">
+06:41
+</td>
+<td style="text-align:right;">
+11:39
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+20 Sep 2020
+</td>
+<td style="text-align:right;">
+19:00
+</td>
+<td style="text-align:right;font-style: italic;">
+06:42
+</td>
+<td style="text-align:right;">
+11:43
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+21 Sep 2020
+</td>
+<td style="text-align:right;">
+18:57
+</td>
+<td style="text-align:right;font-style: italic;">
+06:44
+</td>
+<td style="text-align:right;">
+11:47
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+22 Sep 2020
+</td>
+<td style="text-align:right;">
+18:55
+</td>
+<td style="text-align:right;font-style: italic;">
+06:46
+</td>
+<td style="text-align:right;">
+11:51
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+23 Sep 2020
+</td>
+<td style="text-align:right;">
+18:53
+</td>
+<td style="text-align:right;font-style: italic;">
+06:47
+</td>
+<td style="text-align:right;">
+11:55
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+24 Sep 2020
+</td>
+<td style="text-align:right;">
+18:50
+</td>
+<td style="text-align:right;font-style: italic;">
+06:49
+</td>
+<td style="text-align:right;">
+11:59
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+25 Sep 2020
+</td>
+<td style="text-align:right;">
+18:48
+</td>
+<td style="text-align:right;font-style: italic;">
+06:51
+</td>
+<td style="text-align:right;">
+12:03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+26 Sep 2020
+</td>
+<td style="text-align:right;">
+18:46
+</td>
+<td style="text-align:right;font-style: italic;">
+06:52
+</td>
+<td style="text-align:right;">
+12:07
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+27 Sep 2020
+</td>
+<td style="text-align:right;">
+18:43
+</td>
+<td style="text-align:right;font-style: italic;">
+06:54
+</td>
+<td style="text-align:right;">
+12:11
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+28 Sep 2020
+</td>
+<td style="text-align:right;">
+18:41
+</td>
+<td style="text-align:right;font-style: italic;">
+06:56
+</td>
+<td style="text-align:right;">
+12:14
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+29 Sep 2020
+</td>
+<td style="text-align:right;">
+18:39
+</td>
+<td style="text-align:right;font-style: italic;">
+06:57
+</td>
+<td style="text-align:right;">
+12:18
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+30 Sep 2020
+</td>
+<td style="text-align:right;">
+18:36
+</td>
+<td style="text-align:right;font-style: italic;">
+06:59
+</td>
+<td style="text-align:right;">
+12:22
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+1 Oct 2020
+</td>
+<td style="text-align:right;">
+18:34
+</td>
+<td style="text-align:right;font-style: italic;">
+07:01
+</td>
+<td style="text-align:right;">
+12:26
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+2 Oct 2020
+</td>
+<td style="text-align:right;">
+18:32
+</td>
+<td style="text-align:right;font-style: italic;">
+07:02
+</td>
+<td style="text-align:right;">
+12:30
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+3 Oct 2020
+</td>
+<td style="text-align:right;">
+18:30
+</td>
+<td style="text-align:right;font-style: italic;">
+07:04
+</td>
+<td style="text-align:right;">
+12:34
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+4 Oct 2020
+</td>
+<td style="text-align:right;">
+18:27
+</td>
+<td style="text-align:right;font-style: italic;">
+07:05
+</td>
+<td style="text-align:right;">
+12:38
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+5 Oct 2020
+</td>
+<td style="text-align:right;">
+18:25
+</td>
+<td style="text-align:right;font-style: italic;">
+07:07
+</td>
+<td style="text-align:right;">
+12:42
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+6 Oct 2020
+</td>
+<td style="text-align:right;">
+18:23
+</td>
+<td style="text-align:right;font-style: italic;">
+07:09
+</td>
+<td style="text-align:right;">
+12:46
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+7 Oct 2020
+</td>
+<td style="text-align:right;">
+18:21
+</td>
+<td style="text-align:right;font-style: italic;">
+07:11
+</td>
+<td style="text-align:right;">
+12:50
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+8 Oct 2020
+</td>
+<td style="text-align:right;">
+18:18
+</td>
+<td style="text-align:right;font-style: italic;">
+07:12
+</td>
+<td style="text-align:right;">
+12:54
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+9 Oct 2020
+</td>
+<td style="text-align:right;">
+18:16
+</td>
+<td style="text-align:right;font-style: italic;">
+07:14
+</td>
+<td style="text-align:right;">
+12:58
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+10 Oct 2020
+</td>
+<td style="text-align:right;">
+18:14
+</td>
+<td style="text-align:right;font-style: italic;">
+07:16
+</td>
+<td style="text-align:right;">
+13:02
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+11 Oct 2020
+</td>
+<td style="text-align:right;">
+18:12
+</td>
+<td style="text-align:right;font-style: italic;">
+07:17
+</td>
+<td style="text-align:right;">
+13:06
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+12 Oct 2020
+</td>
+<td style="text-align:right;">
+18:09
+</td>
+<td style="text-align:right;font-style: italic;">
+07:19
+</td>
+<td style="text-align:right;">
+13:10
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+13 Oct 2020
+</td>
+<td style="text-align:right;">
+18:07
+</td>
+<td style="text-align:right;font-style: italic;">
+07:21
+</td>
+<td style="text-align:right;">
+13:13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+14 Oct 2020
+</td>
+<td style="text-align:right;">
+18:05
+</td>
+<td style="text-align:right;font-style: italic;">
+07:22
+</td>
+<td style="text-align:right;">
+13:17
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+15 Oct 2020
+</td>
+<td style="text-align:right;">
+18:03
+</td>
+<td style="text-align:right;font-style: italic;">
+07:24
+</td>
+<td style="text-align:right;">
+13:21
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+16 Oct 2020
+</td>
+<td style="text-align:right;">
+18:01
+</td>
+<td style="text-align:right;font-style: italic;">
+07:26
+</td>
+<td style="text-align:right;">
+13:25
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+17 Oct 2020
+</td>
+<td style="text-align:right;">
+17:59
+</td>
+<td style="text-align:right;font-style: italic;">
+07:28
+</td>
+<td style="text-align:right;">
+13:29
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+18 Oct 2020
+</td>
+<td style="text-align:right;">
+17:57
+</td>
+<td style="text-align:right;font-style: italic;">
+07:29
+</td>
+<td style="text-align:right;">
+13:33
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+19 Oct 2020
+</td>
+<td style="text-align:right;">
+17:54
+</td>
+<td style="text-align:right;font-style: italic;">
+07:31
+</td>
+<td style="text-align:right;">
+13:37
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+20 Oct 2020
+</td>
+<td style="text-align:right;">
+17:52
+</td>
+<td style="text-align:right;font-style: italic;">
+07:33
+</td>
+<td style="text-align:right;">
+13:40
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+21 Oct 2020
+</td>
+<td style="text-align:right;">
+17:50
+</td>
+<td style="text-align:right;font-style: italic;">
+07:35
+</td>
+<td style="text-align:right;">
+13:44
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+22 Oct 2020
+</td>
+<td style="text-align:right;">
+17:48
+</td>
+<td style="text-align:right;font-style: italic;">
+07:36
+</td>
+<td style="text-align:right;">
+13:48
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+23 Oct 2020
+</td>
+<td style="text-align:right;">
+17:46
+</td>
+<td style="text-align:right;font-style: italic;">
+07:38
+</td>
+<td style="text-align:right;">
+13:52
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+24 Oct 2020
+</td>
+<td style="text-align:right;">
+17:44
+</td>
+<td style="text-align:right;font-style: italic;">
+06:40
+</td>
+<td style="text-align:right;">
+13:56
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+25 Oct 2020
+</td>
+<td style="text-align:right;">
+16:42
+</td>
+<td style="text-align:right;font-style: italic;">
+06:42
+</td>
+<td style="text-align:right;">
+13:59
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+26 Oct 2020
+</td>
+<td style="text-align:right;">
+16:40
+</td>
+<td style="text-align:right;font-style: italic;">
+06:43
+</td>
+<td style="text-align:right;">
+14:03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+27 Oct 2020
+</td>
+<td style="text-align:right;">
+16:38
+</td>
+<td style="text-align:right;font-style: italic;">
+06:45
+</td>
+<td style="text-align:right;">
+14:07
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+28 Oct 2020
+</td>
+<td style="text-align:right;">
+16:36
+</td>
+<td style="text-align:right;font-style: italic;">
+06:47
+</td>
+<td style="text-align:right;">
+14:11
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+29 Oct 2020
+</td>
+<td style="text-align:right;">
+16:34
+</td>
+<td style="text-align:right;font-style: italic;">
+06:49
+</td>
+<td style="text-align:right;">
+14:14
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+30 Oct 2020
+</td>
+<td style="text-align:right;">
+16:33
+</td>
+<td style="text-align:right;font-style: italic;">
+06:51
+</td>
+<td style="text-align:right;">
+14:18
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+31 Oct 2020
+</td>
+<td style="text-align:right;">
+16:31
+</td>
+<td style="text-align:right;font-style: italic;">
+06:52
+</td>
+<td style="text-align:right;">
+14:22
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+1 Nov 2020
+</td>
+<td style="text-align:right;">
+16:29
+</td>
+<td style="text-align:right;font-style: italic;">
+06:54
+</td>
+<td style="text-align:right;">
+14:25
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+2 Nov 2020
+</td>
+<td style="text-align:right;">
+16:27
+</td>
+<td style="text-align:right;font-style: italic;">
+06:56
+</td>
+<td style="text-align:right;">
+14:29
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+3 Nov 2020
+</td>
+<td style="text-align:right;">
+16:25
+</td>
+<td style="text-align:right;font-style: italic;">
+06:58
+</td>
+<td style="text-align:right;">
+14:32
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+4 Nov 2020
+</td>
+<td style="text-align:right;">
+16:24
+</td>
+<td style="text-align:right;font-style: italic;">
+06:59
+</td>
+<td style="text-align:right;">
+14:36
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+5 Nov 2020
+</td>
+<td style="text-align:right;">
+16:22
+</td>
+<td style="text-align:right;font-style: italic;">
+07:01
+</td>
+<td style="text-align:right;">
+14:39
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+6 Nov 2020
+</td>
+<td style="text-align:right;">
+16:20
+</td>
+<td style="text-align:right;font-style: italic;">
+07:03
+</td>
+<td style="text-align:right;">
+14:43
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+7 Nov 2020
+</td>
+<td style="text-align:right;">
+16:19
+</td>
+<td style="text-align:right;font-style: italic;">
+07:05
+</td>
+<td style="text-align:right;">
+14:46
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+8 Nov 2020
+</td>
+<td style="text-align:right;">
+16:17
+</td>
+<td style="text-align:right;font-style: italic;">
+07:07
+</td>
+<td style="text-align:right;">
+14:50
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+9 Nov 2020
+</td>
+<td style="text-align:right;">
+16:15
+</td>
+<td style="text-align:right;font-style: italic;">
+07:08
+</td>
+<td style="text-align:right;">
+14:53
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+10 Nov 2020
+</td>
+<td style="text-align:right;">
+16:14
+</td>
+<td style="text-align:right;font-style: italic;">
+07:10
+</td>
+<td style="text-align:right;">
+14:56
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+11 Nov 2020
+</td>
+<td style="text-align:right;">
+16:12
+</td>
+<td style="text-align:right;font-style: italic;">
+07:12
+</td>
+<td style="text-align:right;">
+15:00
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+12 Nov 2020
+</td>
+<td style="text-align:right;">
+16:11
+</td>
+<td style="text-align:right;font-style: italic;">
+07:14
+</td>
+<td style="text-align:right;">
+15:03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+13 Nov 2020
+</td>
+<td style="text-align:right;">
+16:09
+</td>
+<td style="text-align:right;font-style: italic;">
+07:15
+</td>
+<td style="text-align:right;">
+15:06
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+14 Nov 2020
+</td>
+<td style="text-align:right;">
+16:08
+</td>
+<td style="text-align:right;font-style: italic;">
+07:17
+</td>
+<td style="text-align:right;">
+15:09
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+15 Nov 2020
+</td>
+<td style="text-align:right;">
+16:07
+</td>
+<td style="text-align:right;font-style: italic;">
+07:19
+</td>
+<td style="text-align:right;">
+15:12
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+16 Nov 2020
+</td>
+<td style="text-align:right;">
+16:05
+</td>
+<td style="text-align:right;font-style: italic;">
+07:20
+</td>
+<td style="text-align:right;">
+15:15
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+17 Nov 2020
+</td>
+<td style="text-align:right;">
+16:04
+</td>
+<td style="text-align:right;font-style: italic;">
+07:22
+</td>
+<td style="text-align:right;">
+15:18
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+18 Nov 2020
+</td>
+<td style="text-align:right;">
+16:03
+</td>
+<td style="text-align:right;font-style: italic;">
+07:24
+</td>
+<td style="text-align:right;">
+15:21
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+19 Nov 2020
+</td>
+<td style="text-align:right;">
+16:01
+</td>
+<td style="text-align:right;font-style: italic;">
+07:26
+</td>
+<td style="text-align:right;">
+15:24
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+20 Nov 2020
+</td>
+<td style="text-align:right;">
+16:00
+</td>
+<td style="text-align:right;font-style: italic;">
+07:27
+</td>
+<td style="text-align:right;">
+15:27
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+21 Nov 2020
+</td>
+<td style="text-align:right;">
+15:59
+</td>
+<td style="text-align:right;font-style: italic;">
+07:29
+</td>
+<td style="text-align:right;">
+15:30
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+22 Nov 2020
+</td>
+<td style="text-align:right;">
+15:58
+</td>
+<td style="text-align:right;font-style: italic;">
+07:30
+</td>
+<td style="text-align:right;">
+15:32
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+23 Nov 2020
+</td>
+<td style="text-align:right;">
+15:57
+</td>
+<td style="text-align:right;font-style: italic;">
+07:32
+</td>
+<td style="text-align:right;">
+15:35
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+24 Nov 2020
+</td>
+<td style="text-align:right;">
+15:56
+</td>
+<td style="text-align:right;font-style: italic;">
+07:34
+</td>
+<td style="text-align:right;">
+15:38
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+25 Nov 2020
+</td>
+<td style="text-align:right;">
+15:55
+</td>
+<td style="text-align:right;font-style: italic;">
+07:35
+</td>
+<td style="text-align:right;">
+15:40
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+26 Nov 2020
+</td>
+<td style="text-align:right;">
+15:54
+</td>
+<td style="text-align:right;font-style: italic;">
+07:37
+</td>
+<td style="text-align:right;">
+15:42
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+27 Nov 2020
+</td>
+<td style="text-align:right;">
+15:53
+</td>
+<td style="text-align:right;font-style: italic;">
+07:38
+</td>
+<td style="text-align:right;">
+15:45
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+28 Nov 2020
+</td>
+<td style="text-align:right;">
+15:53
+</td>
+<td style="text-align:right;font-style: italic;">
+07:40
+</td>
+<td style="text-align:right;">
+15:47
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+29 Nov 2020
+</td>
+<td style="text-align:right;">
+15:52
+</td>
+<td style="text-align:right;font-style: italic;">
+07:41
+</td>
+<td style="text-align:right;">
+15:49
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+30 Nov 2020
+</td>
+<td style="text-align:right;">
+15:51
+</td>
+<td style="text-align:right;font-style: italic;">
+07:43
+</td>
+<td style="text-align:right;">
+15:51
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+1 Dec 2020
+</td>
+<td style="text-align:right;">
+15:50
+</td>
+<td style="text-align:right;font-style: italic;">
+07:44
+</td>
+<td style="text-align:right;">
+15:53
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+2 Dec 2020
+</td>
+<td style="text-align:right;">
+15:50
+</td>
+<td style="text-align:right;font-style: italic;">
+07:45
+</td>
+<td style="text-align:right;">
+15:55
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+3 Dec 2020
+</td>
+<td style="text-align:right;">
+15:49
+</td>
+<td style="text-align:right;font-style: italic;">
+07:47
+</td>
+<td style="text-align:right;">
+15:57
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+4 Dec 2020
+</td>
+<td style="text-align:right;">
+15:49
+</td>
+<td style="text-align:right;font-style: italic;">
+07:48
+</td>
+<td style="text-align:right;">
+15:59
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+5 Dec 2020
+</td>
+<td style="text-align:right;">
+15:48
+</td>
+<td style="text-align:right;font-style: italic;">
+07:49
+</td>
+<td style="text-align:right;">
+16:01
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+6 Dec 2020
+</td>
+<td style="text-align:right;">
+15:48
+</td>
+<td style="text-align:right;font-style: italic;">
+07:50
+</td>
+<td style="text-align:right;">
+16:02
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+7 Dec 2020
+</td>
+<td style="text-align:right;">
+15:48
+</td>
+<td style="text-align:right;font-style: italic;">
+07:51
+</td>
+<td style="text-align:right;">
+16:04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+8 Dec 2020
+</td>
+<td style="text-align:right;">
+15:47
+</td>
+<td style="text-align:right;font-style: italic;">
+07:53
+</td>
+<td style="text-align:right;">
+16:05
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+9 Dec 2020
+</td>
+<td style="text-align:right;">
+15:47
+</td>
+<td style="text-align:right;font-style: italic;">
+07:54
+</td>
+<td style="text-align:right;">
+16:06
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+10 Dec 2020
+</td>
+<td style="text-align:right;">
+15:47
+</td>
+<td style="text-align:right;font-style: italic;">
+07:55
+</td>
+<td style="text-align:right;">
+16:07
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+11 Dec 2020
+</td>
+<td style="text-align:right;">
+15:47
+</td>
+<td style="text-align:right;font-style: italic;">
+07:56
+</td>
+<td style="text-align:right;">
+16:09
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+12 Dec 2020
+</td>
+<td style="text-align:right;">
+15:47
+</td>
+<td style="text-align:right;font-style: italic;">
+07:57
+</td>
+<td style="text-align:right;">
+16:10
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+13 Dec 2020
+</td>
+<td style="text-align:right;">
+15:47
+</td>
+<td style="text-align:right;font-style: italic;">
+07:57
+</td>
+<td style="text-align:right;">
+16:10
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+14 Dec 2020
+</td>
+<td style="text-align:right;">
+15:47
+</td>
+<td style="text-align:right;font-style: italic;">
+07:58
+</td>
+<td style="text-align:right;">
+16:11
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+15 Dec 2020
+</td>
+<td style="text-align:right;">
+15:47
+</td>
+<td style="text-align:right;font-style: italic;">
+07:59
+</td>
+<td style="text-align:right;">
+16:12
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+16 Dec 2020
+</td>
+<td style="text-align:right;">
+15:47
+</td>
+<td style="text-align:right;font-style: italic;">
+08:00
+</td>
+<td style="text-align:right;">
+16:12
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+17 Dec 2020
+</td>
+<td style="text-align:right;">
+15:48
+</td>
+<td style="text-align:right;font-style: italic;">
+08:01
+</td>
+<td style="text-align:right;">
+16:13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+18 Dec 2020
+</td>
+<td style="text-align:right;">
+15:48
+</td>
+<td style="text-align:right;font-style: italic;">
+08:01
+</td>
+<td style="text-align:right;">
+16:13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+19 Dec 2020
+</td>
+<td style="text-align:right;">
+15:48
+</td>
+<td style="text-align:right;font-style: italic;">
+08:02
+</td>
+<td style="text-align:right;">
+16:13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+20 Dec 2020
+</td>
+<td style="text-align:right;">
+15:49
+</td>
+<td style="text-align:right;font-style: italic;">
+08:02
+</td>
+<td style="text-align:right;">
+16:13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+21 Dec 2020
+</td>
+<td style="text-align:right;">
+15:49
+</td>
+<td style="text-align:right;font-style: italic;">
+08:03
+</td>
+<td style="text-align:right;">
+16:13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+22 Dec 2020
+</td>
+<td style="text-align:right;">
+15:50
+</td>
+<td style="text-align:right;font-style: italic;">
+08:03
+</td>
+<td style="text-align:right;">
+16:13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+23 Dec 2020
+</td>
+<td style="text-align:right;">
+15:50
+</td>
+<td style="text-align:right;font-style: italic;">
+08:03
+</td>
+<td style="text-align:right;">
+16:13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Thursday
+</td>
+<td style="text-align:right;">
+24 Dec 2020
+</td>
+<td style="text-align:right;">
+15:51
+</td>
+<td style="text-align:right;font-style: italic;">
+08:04
+</td>
+<td style="text-align:right;">
+16:13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Friday
+</td>
+<td style="text-align:right;">
+25 Dec 2020
+</td>
+<td style="text-align:right;">
+15:52
+</td>
+<td style="text-align:right;font-style: italic;">
+08:04
+</td>
+<td style="text-align:right;">
+16:12
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Saturday
+</td>
+<td style="text-align:right;">
+26 Dec 2020
+</td>
+<td style="text-align:right;">
+15:53
+</td>
+<td style="text-align:right;font-style: italic;">
+08:04
+</td>
+<td style="text-align:right;">
+16:12
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sunday
+</td>
+<td style="text-align:right;">
+27 Dec 2020
+</td>
+<td style="text-align:right;">
+15:53
+</td>
+<td style="text-align:right;font-style: italic;">
+08:04
+</td>
+<td style="text-align:right;">
+16:11
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Monday
+</td>
+<td style="text-align:right;">
+28 Dec 2020
+</td>
+<td style="text-align:right;">
+15:54
+</td>
+<td style="text-align:right;font-style: italic;">
+08:04
+</td>
+<td style="text-align:right;">
+16:10
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Tuesday
+</td>
+<td style="text-align:right;">
+29 Dec 2020
+</td>
+<td style="text-align:right;">
+15:55
+</td>
+<td style="text-align:right;font-style: italic;">
+08:04
+</td>
+<td style="text-align:right;">
+16:09
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Wednesday
+</td>
+<td style="text-align:right;">
+30 Dec 2020
+</td>
+<td style="text-align:right;">
+15:56
+</td>
+<td style="text-align:right;font-style: italic;">
+08:04
+</td>
+<td style="text-align:right;">
+16:08
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>

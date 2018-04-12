@@ -1,0 +1,234 @@
+---
+title: "Night Times"
+author: "Steve Markham"
+date: 2018-04-05T21:13:45-01:00
+categories: ["R"]
+tags: ["R Markdown", "bats", "suntimes"]
+---
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+
+library(tidyverse)
+library(StreamMetabolism) # for sunset / sunrise times
+library(gridExtra)
+library(broman)
+library(ggmap)
+library(knitr)
+library(hms)
+
+library(kableExtra)
+
+
+
+
+```
+
+
+```{r}
+#<----------------------------------------------------------------------
+#Function - For getting sunset sun rise and night length (used by Exit_Reentry_Times)
+#<----------------------------------------------------------------------
+NightData <- function(StartDate, DurationDays, lat, long) {
+  
+  # Function to return sunset sunrise and night length with long/lat and night
+  #Aruments list (fist Night, duratiojn , lon, lat)
+  
+  #Works with night so and an extra day to get dawn
+  
+  #Get sunrise and sunset times for period of static placement
+  
+  if(DurationDays == 0){DurationDays <- 1}
+  
+  SunTimes <- sunrise.set(lat, long, StartDate, timezone = "Europe/London", num.days = DurationDays + 1)
+  
+  ## Table of Night and sun rise/set and times (based on EmergenceData data frame)
+  
+  # Take away last row
+  SunSets <- SunTimes %>% 
+    slice(1:(n() - 1)) %>% 
+    pull(sunset) 
+  
+  # Take away first row  
+  SunRises <- SunTimes %>% 
+    slice(2:n()) %>% 
+    pull(sunrise) 
+  
+  Nights <- seq.Date(from=StartDate, length.out = DurationDays, by='days')
+  
+  NightLength <- round_hms(as.hms(-(SunSets - SunRises)), 60)
+  
+  #NightLength <- 
+  
+  NightStats <- tibble(Nights, SunSets, SunRises, NightLength)
+  
+  return(NightStats)
+  
+}
+
+#<-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+```
+
+```{r}
+#<----------------------------------------------------------------------
+#Function - With NightData will return text of Suntimes ready for a Table (Kable)
+#<----------------------------------------------------------------------
+TextSunTimes <- function(Data, Type) {
+  
+  #if Type = 1 the no Night Length included
+  #if Type = 2 the Night Length is included
+  #if Type = 3  week day is included but not the Night Length
+  #if Type = 4  week day and Night Length is included
+  
+  if(missing(Type)) {Type <- 1}
+  
+  if (Type == 1) { 
+    
+    Data <- Data %>% 
+      mutate(justmin1 = stringr::str_pad(lubridate::minute(SunSets), 2, side = "left", pad = "0"),
+             timeset = paste(lubridate::hour(SunSets), justmin1, sep=":"), 
+             justmin2 = stringr::str_pad(lubridate::minute(SunRises), 2, side = "left", pad = "0"),
+             justmin3 = stringr::str_pad(lubridate::hour(SunRises), 2, side = "left", pad = "0"),
+             timerise = paste(justmin3, justmin2, sep=":"),
+             night = Fm_date(Nights, 1)) %>% 
+      select(night, timeset, timerise)
+    
+    names(Data) <- c("Night", "Sunset (hrs)", "Sunrise (hrs)")
+    
+  } else if (Type == 2) {
+    
+    Data <- Data %>% 
+      mutate(justmin1 = stringr::str_pad(lubridate::minute(SunSets), 2, side = "left", pad = "0"),
+             timeset = paste(lubridate::hour(SunSets), justmin1, sep=":"), 
+             justmin2 = stringr::str_pad(lubridate::minute(SunRises), 2, side = "left", pad = "0"),
+             justmin3 = stringr::str_pad(lubridate::hour(SunRises), 2, side = "left", pad = "0"),
+             timerise = paste(justmin3, justmin2, sep=":"),
+             night = Fm_date(Nights, 1),
+             NightLength = stringr::str_sub(as.character(NightLength), 1, 5)) %>% 
+      select(night, timeset, timerise, NightLength)
+    
+    names(Data) <- c("Night", "Sunset (hrs)", "Sunrise (hrs)", "Duration (hrs:min)")
+    
+  } else if (Type == 3) {
+  
+    Data <- Data %>% 
+      mutate(justmin1 = stringr::str_pad(lubridate::minute(SunSets), 2, side = "left", pad = "0"),
+             timeset = paste(lubridate::hour(SunSets), justmin1, sep=":"), 
+             justmin2 = stringr::str_pad(lubridate::minute(SunRises), 2, side = "left", pad = "0"),
+             justmin3 = stringr::str_pad(lubridate::hour(SunRises), 2, side = "left", pad = "0"),
+             timerise = paste(justmin3, justmin2, sep=":"),
+             night = Fm_date(Nights, 1),
+             weekday = lubridate::wday(Nights, label = T, abbr = F)) %>%
+      select(weekday, night, timeset, timerise)
+    
+    names(Data) <- c("Day of Week", "Night", "Sunset (hrs)", "Sunrise (hrs)")
+  
+  } else if (Type == 4) {
+    
+    Data <- Data %>% 
+      mutate(justmin1 = stringr::str_pad(lubridate::minute(SunSets), 2, side = "left", pad = "0"),
+             timeset = paste(lubridate::hour(SunSets), justmin1, sep=":"), 
+             justmin2 = stringr::str_pad(lubridate::minute(SunRises), 2, side = "left", pad = "0"),
+             justmin3 = stringr::str_pad(lubridate::hour(SunRises), 2, side = "left", pad = "0"),
+             timerise = paste(justmin3, justmin2, sep=":"),
+             night = Fm_date(Nights, 1),
+             weekday = lubridate::wday(Nights, label = T, abbr = F),
+             NightLength = stringr::str_sub(as.character(NightLength), 1, 5)) %>%
+      select(weekday, night, timeset, timerise, NightLength)
+    
+    names(Data) <- c("Day of Week", "Night", "Sunset (hrs)", "Sunrise (hrs)", "Duration (hrs:min)")
+    
+  }
+  
+  return(Data)
+  
+}
+
+#<-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+```
+
+
+```{r}
+###########################################################################
+#Formats a POSdate or Date for Reporting.
+Fm_date <- function(Format.Date, style){
+  
+  if(style == 1) {
+    
+    stringr::str_c( lubridate::day(Format.Date) , 
+           lubridate::month(Format.Date, label=TRUE), 
+           lubridate::year(Format.Date), sep=" ")
+    
+  } else if(style == 2) {
+    
+    #Abbr month and date only
+    stringr::str_c( lubridate::day(Format.Date), 
+           lubridate::month(Format.Date, label=TRUE, abbr=FALSE), 
+           lubridate::year(Format.Date), sep=" ")
+    
+  } else if(style == 3) {
+    
+    stringr::str_c( lubridate::day(Format.Date) , 
+           lubridate::month(Format.Date, label=TRUE), sep=" ")
+    
+  } else if(style == 4) {
+    #Full date e.g. Thursday 3 August 2017
+    stringr::str_c( lubridate::wday(Format.Date, label=TRUE, abbr=FALSE),
+                    lubridate::day(Format.Date),
+                    lubridate::month(Format.Date, label=TRUE, abbr=FALSE), 
+                    lubridate::year(Format.Date), sep=" ")
+    
+  } else if(style == 5) {
+    #Full date and Time e.g. Thu 3 Aug 2017 20:13:56
+    stringr::str_c( lubridate::wday(Format.Date, label=TRUE, abbr=TRUE),
+                    " ",
+                    lubridate::day(Format.Date),
+                    " ",
+                    lubridate::month(Format.Date, label=TRUE, abbr=TRUE), 
+                    " ",
+                    lubridate::year(Format.Date), 
+                    " ",
+                    stringr::str_pad(lubridate::hour(Format.Date), 2, side = "left", pad = "0"),
+                    ":",
+                    stringr::str_pad(lubridate::minute(Format.Date), 2, side = "left", pad = "0"),
+                    "hrs",
+                    sep="")
+    
+  } else if(style == 6) {
+    
+    #Simple date 
+    stringr::str_c( lubridate::day(Format.Date), 
+                    lubridate::month(Format.Date), 
+                    stringr::str_sub(lubridate::year(Format.Date), start=3, end=4), 
+                    sep="-")
+    
+  } else if(style == 7) {
+    
+    # date (month and Year)
+    stringr::str_c( lubridate::month(Format.Date, label=TRUE, , abbr=FALSE), 
+                    lubridate::year(Format.Date), 
+                    sep=" ")
+    
+  }
+}
+```
+
+
+## Night Times for a Year {#BeaulieuSun}
+
+Sun times for a year can be obtained for any loaction or any year using the functions `NightData` and `TextSunTimes`; for more details on these functions see section \@ref(SunTimes).   Table \@ref(tab:nice-tab13) below shows the Suntimes for Beaulieu Park for year 2020.
+
+* Start Date e.g. 1^st^ January 2020
+* Duration`365` days 
+* Latitude  `51.762703`  
+* Longitude `0.510175`
+
+
+```{r nice-tab13, tidy=FALSE, echo = TRUE}
+Beaulieu <- NightData(lubridate::dmy(01012020), 365, 51.762703, 0.510175)
+Beaulieu
+kable(TextSunTimes(Beaulieu, 4), "html", align = c("l", "r", "r", "r", "r"),
+      booktabs = TRUE, caption = 'Beaulieu Park Night Times 2020') %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>%
+  column_spec(4, italic = T) %>%
+  scroll_box(width = "700px", height = "250px")
+```
